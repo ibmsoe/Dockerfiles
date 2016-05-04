@@ -1,0 +1,107 @@
+# This file contains the default values for the configuration of this
+# application. In order to change them, write your own config-local.yml file
+# (it will be ignored by git). For more info, you can read the dedicated page
+# here: http://port.us.org/docs/Configuring-Portus.html.
+
+# Settings for the Portus mailer.
+email:
+  from: "portus@example.com"
+  name: "Portus"
+  reply_to: "no-reply@example.com"
+
+  # If enabled, then SMTP will be used. Otherwise 'sendmail' will be used
+  # (defaults to: /usr/sbin/sendmail -i -t).
+  smtp:
+    enabled: false
+    address: "smtp.example.com"
+    port: 587,
+    user_name: "username@example.com"
+    password: "password"
+    domain: "example.com"
+
+# If enabled, then the profile picture will be picked from the Gravatar
+# associated with each user. See: https://en.gravatar.com/
+gravatar:
+  enabled: true
+
+# LDAP support. If enabled, then only users of the specified LDAP server will
+# be able to use Portus.
+ldap:
+  enabled: false
+
+  hostname: "ldap_hostname"
+  port: 389
+
+  # Available options: "plain", "simple_tls" and "starttls". The default is
+  # "plain", the recommended is "starttls".
+  method: "plain"
+
+  # The base where users are located (e.g. "ou=users,dc=example,dc=com").
+  base: ""
+
+  # User filter (e.g. "mail=george*").
+  filter: ""
+
+  # The LDAP attribute where to search for username. The default is 'uid'.
+  uid: "uid"
+
+  # LDAP credentials used to search for a user.
+  authentication:
+    enabled: false
+    bind_dn: ""
+    password: ""
+
+  # Portus needs an email for each user, but there's no standard way to get
+  # that from LDAP servers. You can tell Portus how to get the email from users
+  # registered in the LDAP server with this configurable value. There are three
+  # possibilities:
+  #
+  #   - disabled: this is the default value. It means that Portus won't do a
+  #     thing when registering LDAP users (users will be redirected to their
+  #     profile page until they setup an email account).
+  #   - enabled where "attr" is empty: for this you need "ldap.base" to have
+  #     some value. In this case, the hostname will be guessed from the domain
+  #     component of the provided base string. For example, for the dn:
+  #     "ou=users,dc=example,dc=com", and a user name "user", the resulting
+  #     email is "user@example.com".
+  #   - enabled where "attr" is not empty: with this you specify the attribute
+  #     inside a LDIF record where the email is set.
+  #
+  # If something goes wrong when trying to guess the email, then it just falls
+  # back to the default behavior (empty email).
+  guess_email:
+    enabled: false
+    attr: ""
+
+# Set first_user_admin to true if you want that the first user that signs up
+# to be an admin.
+#
+# Set to false otherwise. Then you will need to run
+#   rake portus:make_admin[USERNAME]
+# in order to set the admin user
+first_user_admin:
+  enabled: true
+
+# If enabled, then users can signup with the signup form. Otherwise, the admin
+# is responsible of creating new users by either:
+#   - Using the "portus:create_user" rake task.
+#   - Using the form available in the admin panel.
+# This is ignored if LDAP is enabled.
+signup:
+  enabled: true
+
+# By default require ssl to be enabled when running on production
+check_ssl_usage:
+  enabled: false
+
+# Set the expiration time for the JWT Token that Portus uses to authenticate
+# with the registry. Note that this is just a work-around on the fact that the
+# registry does not try to get a new token again after the current one has
+# expired. Once a solution is issued upstream, we can deprecate this option.
+#
+# See: https://github.com/SUSE/Portus/issues/510
+jwt_expiration_time:
+  value: "5.minutes"
+
+# The FQDN of the machine where Portus is being deployed.
+

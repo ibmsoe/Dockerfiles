@@ -1,0 +1,14 @@
+default: &default
+  adapter: mysql2
+  encoding: utf8
+  host: <%= ENV['PORTUS_DB_HOST'] %>
+  port: <%= ENV['PORTUS_DB_PORT'] %>
+  username: <%= ENV["PORTUS_DB_USERNAME"] %>
+  password: <%= ENV["PORTUS_DB_PASSWORD"] %>
+  database: <%= ENV["PORTUS_DB_NAME"] %>
+
+development:
+  <<: *default
+
+production:
+  <<: *default
