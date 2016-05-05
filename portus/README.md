@@ -6,7 +6,7 @@ For building it on PowerPC LE platform do this
 docker build -t ppc64le/portus -f Dockerfile.ppc64le .
 
 #Run
-1. Get the portus certificate and key
+1. Get the default portus certificate and key
 mkdir /certs
 cd /certs
 wget https://raw.githubusercontent.com/SUSE/Portus/master/vagrant/conf/ca_bundle/server.crt
@@ -24,3 +24,6 @@ docker run -itd  -v /certs:/certs \
 -e PORTUS_FQDN="portus.test.lan" \
 -p 3000:3000 \
 ppc64le/portus
+
+
+#A sample registry config file to be used with the default configuration and default portus certificate is included as reference

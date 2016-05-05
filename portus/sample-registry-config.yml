@@ -1,0 +1,28 @@
+version: 0.1
+storage:
+  filesystem:
+    rootdirectory: <LOCAL_FILESYSTEM_PATH_TO_STORE_IMAGES>
+  delete:
+    enabled: true
+http:
+  addr: 0.0.0.0:5000
+  host: https://<REGISTRY_SERVER_FQDN_OR_IP>:5000
+  debug:
+    addr: 0.0.0.0:5001
+  tls:
+      certificate: <PATH_TO_REGISTRY_SERVER_CERTIFICATE>
+      key: <PATH_TO_REGISTRY_SERVER_CERTIFICATE_KEY>
+auth:
+  token:
+    realm: http://<PORTUS_SERVER_FQDN_OR_IP>:3000/v2/token
+    service: <REGISTRY_SERVER_FQDN_OR_IP>:5000
+    issuer: portus.test.lan
+    rootcertbundle: <PATH_TO_PORTUS_CERTIFICATE>
+notifications:
+  endpoints:
+    - name: portus
+      url: http://<PORTUS_SERVER_FQDN_OR_IP>:3000/v2/webhooks/events
+      timeout: 500ms
+      threshold: 5
+      backoff: 1s
+
