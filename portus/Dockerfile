@@ -14,7 +14,7 @@ RUN apt-get update -y && \
     libxml2-dev \
     libxslt1.1 \
     libxslt1-dev \
-    libmysqlclient18 \
+    libmysqlclient20 \
     libmysqlclient-dev 
 
 RUN git clone https://github.com/SUSE/Portus.git /Portus
