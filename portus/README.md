@@ -20,7 +20,7 @@ docker run -itd  -v /certs:/certs \
 -e PORTUS_DB_NAME=portus_db \
 -e PORTUS_SECRET_KEY_BASE=8bc8ccc710eafd73d43cd59ac8881aadc89f7a6ab55f1ac11c97fb436a3931cc78c38e735e664958d9e793725f3d52178f4e2c376c346edbaca3936aebf66e27 \
 -e PORTUS_KEY_PATH=/certs/server.key \
--e PORTUS_PASSWORD=portus  \
+-e PORTUS_PASSWORD=portus123  \
 -e PORTUS_FQDN="portus.test.lan" \
 -p 3000:3000 \
 ppc64le/portus
