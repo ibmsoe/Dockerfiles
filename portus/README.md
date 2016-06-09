@@ -1,17 +1,22 @@
 Dockerize Portus
-#Build
+##Build
 docker build -t portus .
 
 For building it on PowerPC LE platform do this
+<pre>
 docker build -t ppc64le/portus -f Dockerfile.ppc64le .
+</pre>
 
-#Run
-1. Get the default portus certificate and key
+##Run
+* Get the default portus certificate and key
+<pre>
 mkdir /certs
 cd /certs
 wget https://raw.githubusercontent.com/SUSE/Portus/master/vagrant/conf/ca_bundle/server.crt
 wget https://raw.githubusercontent.com/SUSE/Portus/master/vagrant/conf/ca_bundle/server.key
-
+</pre>
+* Start the portus container
+<pre>
 docker run -itd  -v /certs:/certs \
 -e PORTUS_DB_HOST=192.168.122.253 \
 -e PORTUS_DB_PORT=3306 \
@@ -24,6 +29,6 @@ docker run -itd  -v /certs:/certs \
 -e PORTUS_FQDN="portus.test.lan" \
 -p 3000:3000 \
 ppc64le/portus
+</pre>
 
-
-#A sample registry config file to be used with the default configuration and default portus certificate is included as reference
+* A sample registry config file to be used with the default configuration and default portus certificate is included as reference
