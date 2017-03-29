@@ -1,0 +1,35 @@
+FROM ppc64le/ubuntu:latest
+
+RUN apt-get update && \
+apt-get install -y wget default-jre default-jdk unzip vim bzip2 gawk gcc make
+
+RUN mkdir -p /usr/local/staf/services /usr/local/ltp /usr/local/staf/bin/ /usr/local/staf/xml/
+
+RUN wget --no-check-certificate http://prdownloads.sourceforge.net/staf/STAF3426-setup-linux-ppc64le.bin && \
+chmod +x /STAF3426-setup-linux-ppc64le.bin && \
+./STAF3426-setup-linux-ppc64le.bin -i silent -DACCEPT_LICENSE=1
+
+RUN wget --no-check-certificate http://prdownloads.sourceforge.net/staf/STAXV3517.tar && \
+tar -xvf STAXV3517.tar && \
+cp -r stax /usr/local/staf/services/
+
+RUN wget --no-check-certificate https://github.com/linux-test-project/ltp/releases/download/20160920/ltp-full-20160920.tar.bz2 && \
+tar xvfj ltp-full-20160920.tar.bz2 && \
+cd ltp-full-20160920 && \
+./configure --prefix=`pwd` --with-open-posix-testsuite CC="gcc -m64" && \
+make && \
+make all && \
+make install && \
+cp -r /ltp-full-20160920/* /usr/local/ltp/
+
+COPY ./STAF.cfg /
+COPY ./staf.sh /etc/profile.d/staf.sh
+RUN chmod +x /etc/profile.d/staf.sh && \
+cat STAF.cfg >> /usr/local/staf/bin/STAF.cfg && \
+cat /etc/profile.d/staf.sh >> /root/.bashrc
+
+COPY ./entry_script.sh /
+RUN chmod +x /entry_script.sh
+COPY ./ltp.xml /usr/local/staf/xml/
+
+ENTRYPOINT ["/bin/bash", "-c", "./entry_script.sh"]

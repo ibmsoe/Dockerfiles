@@ -1,0 +1,2315 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE stax SYSTEM "stax.dtd">
+<!--
+@DESC;Linux Test Project, LTP, is a collection of testsuites for testing the linux kernel and related features.  For more details go to, <a href="http://ltp.sourceforge.net"><u>http://ltp.sourceforge.net</u></a>
+@VAR;ClientLog;optional;single;/var/log/staf;Path for client-side logging.
+@VAR;resPoolServer;optional;single;matrix;Name of resource pool server
+@VAR;clientPool;optional;single;up;Name of machine client pool on resource pool server.
+@VAR;RHOST;optional;single;0;Machine that will act as the server for the network tests.
+@VAR;PASSWD;optional;single;0; Password to network server machine - RHOST.
+@VAR;RUNTEST;optional;list;syscalls,fs,dio,mm,commands,ipc,sched,pty,math; List of runtest scripts to execute.
+@VAR;INSTANCES;optional;single;1;Number of concurrent instances to execute.
+@VAR;TIME;optional;single;0;Length of time to execute tests.
+@VAR;LOOPS;optional;single;1;Number of loops to execute.
+@VAR;CLEAN;optional;single;1;Acts as a switch to turn cleanup on(1) and off(0).
+@VAR;EXECTIME;optional;single;0;A time limit of how long to execute a single test, before killing.
+
+-->
+<!--
+
+Copyright (c) International Business Machines  Corp., 2002
+
+This program is free software;  you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY;  without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
+the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program;  if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+FILE        : ltp.xml
+DESCRIPTION : STAX script for execution of the LTP.
+HISTORY     :
+
+08/2002 - Released. Robbie Williamson (robbiew@austin.ibm.com)
+
+8/30/02 - Added support for network tests.  Robbie Williamson (robbiew@austin.ibm.com)
+
+9/18/02 - Added support for resource pools.  Robbie Williamson (robbiew@austin.ibm.com)
+
+9/23/02 - Correct bug in resource support code.  Robbie Williamson (robbiew@austin.ibm.com)
+
+9/25/02 - Reorganized test flow by moving paralleliterate further outward.  Robbie Williamson (robbiew@austin.ibm.com)
+
+10/03/02 - Added an individual test timer, hardware data gather function, ClientLog variable, and ServerLog variable. Robbie Williamson (robbiew@austin.ibm.com)
+
+10/10/02 - Removed race condition between logfile path creation and sar data logging. Robbie Williamson (robbiew@austin.ibm.com)
+
+10/18/02 - Fixed bug that was causing the results gathering to break. The reorg in test flow (9/25/02) had caused this. Robbie Williamson (robbiew@austin.ibm.com)
+
+10/21/02 - Fixed bug in results gathering. There was a bad assumption that the machine hosting the XML code is also the STAX server.  Also added code to create periodical 24hour snapshots, instead of replacing the same files every 24 hours. Robbie Williamson (robbiew@austin.ibm.com)
+ 
+11/04/02 - Renamed LogPath variable to ClientLog.   
+
+11/05/02 - Added code to zero out the LTP output file on the client after it's successfully transferred to the server.
+
+11/06/02 - Added fsx runtest scenario to default list.
+
+11/15/02 - Added blocks around most processes to allow users to kill a block if it gets "stuck"
+
+11/20/02 - Removed "/ltp" from default ClientLog and ServerLog settings, and changed code to add "/ltp" to wherever 
+ClientLog and ServerLog paths indicate.
+
+11/25/02 - Added hostnames to block labels and additional blocks to RunTest section. Also added the machname to test label.
+
+12/04/02 - Replaced the "float" scenario with "math" in the default list.
+
+12/16/02 - Added additional comment info to header.
+
+12/24/02 - Added "pty" scenario to default.
+
+-->
+
+<stax>
+
+<!--
+
+Call main_ltp by default with these settings:
+
+MachList : ["'local'"]
+RUNTEST : ['syscalls','fs','fsx','dio','mm','commands','ipc','sched','pty','math']
+INSTANCES : "1"
+TIME : "0"
+LOOPS: "1"
+CLEAN: "1"
+
+The test will, by default, execute one instance of the tests executed in
+the pan script, runalltests.sh, for one loop on the local STAX server.
+
+-->
+
+  <defaultcall function="main_ltp"/>
+
+
+
+  <!--
+
+    *************** main_ltp ***************
+
+    * Download latest CVS LTP image to STAX server.
+    * Install LTP source code on all test clients.
+    * Build the LTP on all test clients.
+    * Configure the network test server if needed.
+    * Start sar and testing on all clients.
+    * Gather sar and LTP results from all clients and 
+      store on test server.
+
+
+  -->
+
+  <function name="main_ltp">
+
+   <function-map-args>
+
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="resPoolServer">
+        Name of resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="clientPool">
+        Name of machine client pool on resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="PASSWD" default="0">
+        Password to network server machine - RHOST. 
+     </function-optional-arg>
+     <function-optional-arg name="RUNTEST" default="['syscalls','fs','fsx','dio','mm','commands','ipc','sched','pty','math']">
+        List of runtest scripts to execute.
+     </function-optional-arg>
+     <function-optional-arg name="INSTANCES" default="1">
+        Number of concurrent instances to execute. 
+     </function-optional-arg>
+     <function-optional-arg name="TIME" default="0">
+        Length of time to execute tests.
+     </function-optional-arg>
+     <function-optional-arg name="LOOPS" default="1">
+        Number of loops to execute.
+     </function-optional-arg>
+     <function-optional-arg name="CLEAN" default="1"> 
+        Acts as a switch to turn cleanup on(1) and off(0).
+     </function-optional-arg>
+     <function-optional-arg name="EXECTIME" default="0"> 
+        A time limit of how long to execute a single test, before killing. 
+     </function-optional-arg>
+
+    </function-map-args>
+
+    <sequence>
+  	
+      <script>
+
+	# Add "\ltp" to ServerLog and ClientLog pathnames
+	ServerLog = ServerLog + '/ltp'
+	ClientLog = ClientLog + '/ltp'
+
+      </script>  
+      <call function="'ResPoolCheck'">
+       {
+        'MachList' : MachList,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+      <if expr="RHOST != 0">
+
+        <script>
+
+          # Add the RHOST to the list of machines
+          TempList = []
+          TempList.append(MachList)
+          TempList.append(RHOST)
+          MachList = []
+          MachList = TempList
+  
+        </script> 
+  
+      </if> 
+      <call function="'BuildScenario'">{'RHOST' : RHOST,'INSTANCES' : INSTANCES,'RUNTEST' : RUNTEST,'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList">  
+      <sequence>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence>
+ 
+        <parallel>
+
+          <call function="'RunTests'">
+           {
+            'machName' : machName,
+            'ClientLog' : ClientLog,
+            'ServerLog' : ServerLog,
+            'RHOST' : RHOST,
+            'RUNTEST' : RUNTEST,
+            'TIME' : TIME,
+            'LOOPS' : LOOPS,
+            'INSTANCES' : INSTANCES,
+            'EXECTIME' : EXECTIME
+           }
+          </call>
+          <call function="'TimedResultsCheck'">{'machName' : machName, 'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+          <call function="'StartSar'">{'machName' : machName,'ClientLog' : ClientLog,'RHOST' : RHOST}</call>
+
+        </parallel>
+       
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'PrepareResults'">{'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList"> 
+      <sequence>
+ 
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence>
+ 
+        <call function="'Results'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+        <call function="'CleanUp'">{'machName' : machName,'ClientLog' : ClientLog,'CLEAN' : CLEAN}</call>
+
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'LocalCleanUp'">{'CLEAN' : CLEAN}</call>
+      <call function="'ReleaseClients'">
+       {
+        'MachList' : MachList,
+        'RHOST' : RHOST,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+
+    </sequence>
+
+  </function>
+
+
+
+
+
+  <!--
+
+    *************** NoDownload ***************
+
+    * Install LTP source code on all test clients.
+    * Build the LTP on all test clients.
+    * Configure the network test server if needed.
+    * Start sar and testing on all clients.
+    * Gather sar and LTP results from all clients and 
+      store on test server.
+
+
+  -->
+
+
+  <function name="NoDownload">
+
+   <function-map-args>
+
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="resPoolServer">
+        Name of resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="clientPool">
+        Name of machine client pool on resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="PASSWD" default="0">
+        Password to network server machine - RHOST. 
+     </function-optional-arg>
+     <function-optional-arg name="RUNTEST" default="['syscalls','fs','dio','mm','commands','ipc','sched','pty','math']">
+        List of runtest scripts to execute.
+     </function-optional-arg>
+     <function-optional-arg name="INSTANCES" default="1">
+        Number of concurrent instances to execute. 
+     </function-optional-arg>
+     <function-optional-arg name="TIME" default="0">
+        Length of time to execute tests.
+     </function-optional-arg>
+     <function-optional-arg name="LOOPS" default="1">
+        Number of loops to execute.
+     </function-optional-arg>
+     <function-optional-arg name="CLEAN" default="1"> 
+        Acts as a switch to turn cleanup on(1) and off(0).
+     </function-optional-arg>
+     <function-optional-arg name="EXECTIME" default="0"> 
+        A time limit of how long to execute a single test, before killing. 
+     </function-optional-arg>
+
+    </function-map-args>
+
+    <sequence>
+     
+      <script>
+
+	# Add "\ltp" to ServerLog and ClientLog pathnames
+	ServerLog = ServerLog + '/ltp'
+	ClientLog = ClientLog + '/ltp'
+
+      </script>  
+      <call function="'ResPoolCheck'">
+       {
+        'MachList' : MachList,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+      <if expr="RHOST != 0">
+
+        <script>
+
+          # Add the RHOST to the list of machines
+          TempList = []
+          TempList.append(MachList)
+          TempList.append(RHOST)
+          MachList = []
+          MachList = TempList
+  
+        </script> 
+  
+      </if> 
+      <call function="'Install'">{'MachList' : MachList,'RHOST' : RHOST}</call>
+      <call function="'BuildScenario'">{'RHOST' : RHOST,'INSTANCES' : INSTANCES,'RUNTEST' : RUNTEST,'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList">  
+      <sequence>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence>
+ 
+        <call function="'Build'">{'machName' : machName,'ClientLog' : ClientLog,'RHOST' : RHOST}</call>
+        <if expr="RHOST != 0">
+          <call function="'NetworkConfigure'">{'RHOST' : RHOST,'MachList' : MachList,'machName' : machName}</call>
+        </if>
+        <parallel>
+
+          <call function="'RunTests'">
+           {
+            'machName' : machName,
+            'ClientLog' : ClientLog,
+            'ServerLog' : ServerLog,
+            'RHOST' : RHOST,
+            'RUNTEST' : RUNTEST,
+            'TIME' : TIME,
+            'LOOPS' : LOOPS,
+            'INSTANCES' : INSTANCES,
+            'EXECTIME' : EXECTIME
+           }
+          </call>
+          <call function="'TimedResultsCheck'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+          <call function="'StartSar'">{'machName' : machName,'ClientLog' : ClientLog,'RHOST' : RHOST}</call>
+
+        </parallel>
+
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'PrepareResults'">{'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList">  
+      <sequence>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence> 
+        
+        <call function="'Results'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+        <call function="'CleanUp'">{'machName' : machName,'ClientLog' : ClientLog,'CLEAN' : CLEAN}</call>
+
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'LocalCleanUp'">{'CLEAN' : CLEAN}</call>
+      <call function="'ReleaseClients'">
+       {
+        'MachList' : MachList,
+        'RHOST' : RHOST,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+
+    </sequence>
+
+  </function>
+
+
+
+
+
+  <!--
+
+    *************** Test ***************
+
+    * Configure the network test server if needed.
+    * Start sar and testing on all clients.
+    * Gather sar and LTP results from all clients and 
+      store on test server.
+
+
+  -->
+
+  <function name="Test">
+
+   <function-map-args>
+
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="resPoolServer">
+        Name of resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="clientPool">
+        Name of machine client pool on resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="PASSWD" default="0">
+        Password to network server machine - RHOST. 
+     </function-optional-arg>
+     <function-optional-arg name="RUNTEST" default="['syscalls','fs','dio','mm','commands','ipc','sched','pty','math']">
+        List of runtest scripts to execute.
+     </function-optional-arg>
+     <function-optional-arg name="INSTANCES" default="1">
+        Number of concurrent instances to execute. 
+     </function-optional-arg>
+     <function-optional-arg name="TIME" default="0">
+        Length of time to execute tests.
+     </function-optional-arg>
+     <function-optional-arg name="LOOPS" default="1">
+        Number of loops to execute.
+     </function-optional-arg>
+     <function-optional-arg name="CLEAN" default="1"> 
+        Acts as a switch to turn cleanup on(1) and off(0).
+     </function-optional-arg>
+     <function-optional-arg name="EXECTIME" default="0"> 
+        A time limit of how long to execute a single test, before killing. 
+     </function-optional-arg>
+
+    </function-map-args>
+
+    <sequence>
+
+      <script>
+
+	# Add "\ltp" to ServerLog and ClientLog pathnames
+	ServerLog = ServerLog + '/ltp'
+	ClientLog = ClientLog + '/ltp'
+
+      </script>  
+      <call function="'ResPoolCheck'">
+       {
+        'MachList' : MachList,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+      <if expr="RHOST != 0">
+
+        <script>
+
+          # Add the RHOST to the list of machines
+          TempList = []
+          TempList.append(MachList)
+          TempList.append(RHOST)
+          MachList = []
+          MachList = TempList
+  
+        </script> 
+  
+      </if> 
+      <call function="'BuildScenario'">{'RHOST' : RHOST,'INSTANCES' : INSTANCES,'RUNTEST' : RUNTEST,'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList">  
+      <sequence>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence> 
+ 
+        <if expr="RHOST != 0">
+          <call function="'NetworkConfigure'">{'RHOST' : RHOST,'MachList' : MachList,'machName' : machName}</call>
+        </if>
+        <parallel>
+
+          <call function="'RunTests'">
+           {
+            'machName' : machName,
+            'ClientLog' : ClientLog,
+            'ServerLog' : ServerLog,
+            'RHOST' : RHOST,
+            'RUNTEST' : RUNTEST,
+            'TIME' : TIME,
+            'LOOPS' : LOOPS,
+            'INSTANCES' : INSTANCES,
+            'EXECTIME' : EXECTIME
+           }
+          </call>
+          <call function="'TimedResultsCheck'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+          <call function="'StartSar'">{'machName' : machName,'ClientLog' : ClientLog,'RHOST' : RHOST}</call>
+
+        </parallel>
+
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'PrepareResults'">{'TestNameList' : TestNameList}</call>
+      <paralleliterate var="machName" in="MachList">  
+      <sequence>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+
+       </script>
+       <block name="shortMachName">
+       <sequence>      
+ 
+        <call function="'Results'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+        <call function="'CleanUp'">{'machName' : machName,'ClientLog' : ClientLog,'CLEAN' : CLEAN}</call>
+
+       </sequence>
+       </block>
+
+      </sequence>
+      </paralleliterate>
+      <call function="'LocalCleanUp'">{'CLEAN' : CLEAN}</call>
+      <call function="'ReleaseClients'">
+       {
+        'MachList' : MachList,
+        'RHOST' : RHOST,
+        'resPoolServer' : resPoolServer,
+        'clientPool' : clientPool
+       }
+      </call>
+
+    </sequence>
+
+  </function>
+
+
+  <!--
+
+  *************** Build Scenario List ***************
+
+  * Create the scenario list for each instance.
+  * Randomize the scenario lists if more than one instance.
+ 
+
+  -->
+
+  <function name="BuildScenario">
+
+   <function-map-args>
+
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+
+     <function-optional-arg name="RUNTEST" default="['syscalls','fs','dio','mm','commands','ipc','sched','pty','math']">
+        List of runtest scripts to execute.
+     </function-optional-arg>
+     
+     <function-optional-arg name="INSTANCES" default="1">
+        Number of concurrent instances to execute. 
+     </function-optional-arg>
+     
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+
+   </function-map-args>  
+
+   <sequence>
+
+     <block name="'BuildScenarioBlock1'">
+     <iterate var="scenario" in="RUNTEST">
+       
+       <process name="'Create List of Tests to Execute'">
+
+         <location>'local'</location>
+         <command>'cat'</command>
+         <parms>'/usr/local/ltp/runtest/%s' % (scenario) </parms>
+         <stdout mode="'append'">
+           '/tmp/ltp-%s-alltests' % STAXJobID
+         </stdout>
+
+       </process>
+
+     </iterate>
+     </block>
+     <block name="'BuildScenarioBlock2'">
+     <script>
+
+       InstanceList=[]
+       counter1=int(INSTANCES)
+       counter2=0
+       while 1:
+               InstanceList.append(counter2)
+               counter2=counter2 + 1
+               if counter2 >= counter1:
+                       break
+
+     </script>
+     </block>
+     <block name="'BuildScenarioBlock3'">
+     <if expr="INSTANCES == 1">
+      
+       <process name="'Rename Scenario File'">
+
+         <location>'local'</location>
+         <command>'mv'</command>
+         <parms>'-f /tmp/ltp-%s-alltests /tmp/ltp-%s-alltests.0' % (STAXJobID,STAXJobID)</parms>
+
+       </process>
+
+     </if>
+     </block>
+     <if expr="INSTANCES > 1">
+
+       <sequence>
+
+         <block name="'BuildScenarioBlock4'">
+         <process name="'Build rand_lines Libraries'">
+
+           <location>'local'</location>
+           <command>'make'</command>
+           <parms>'-f /usr/local/ltp/lib/Makefile'</parms>
+           <workdir>'/usr/local/ltp/lib'</workdir>
+
+         </process>
+         </block>
+         <block name="'BuildScenarioBlock5'">
+         <process name="'Build rand_lines Binary'">
+       
+           <location>'local'</location>
+           <command>'make'</command>
+           <parms>'-f /usr/local/ltp/tools/Makefile rand_lines'</parms>
+           <workdir>'/usr/local/ltp/tools'</workdir>
+
+         </process>
+         </block>
+         <block name="'BuildScenarioBlock6'">
+         <iterate var="instanceNumber" in="InstanceList">
+
+           <process name="'Randomize Scenario Files'">
+ 
+             <location>'local'</location>
+             <command mode="'shell'">'/usr/local/ltp/tools/rand_lines'</command>
+             <parms>'-g /tmp/ltp-%s-alltests' % STAXJobID</parms>
+             <workdir>'/usr/local/ltp/tools'</workdir>
+             <stdout mode="'replace'">
+                '/tmp/ltp-%s-alltests.%s' % (STAXJobID,instanceNumber)
+             </stdout>
+
+           </process>
+
+         </iterate> 
+         </block>
+         <block name="'BuildScenarioBlock7'">
+         <process name="'Remove Non-Randomized Scenario File'">
+
+           <location>'local'</location>
+           <command>'rm'</command>
+           <parms>'-f /tmp/ltp-%s-alltests' % STAXJobID</parms>
+
+         </process>
+	 </block>
+
+       </sequence>
+
+     </if>
+     <block name="'BuildScenarioBlock8'">
+     <script>
+
+       import string
+       NameListFile='/tmp/ltp-' + str(STAXJobID) + '-alltests.0'
+       NameList=open(NameListFile,"r")
+       TestNameList = []
+       NameLine=NameList.readline()
+       while NameLine != '':
+               LineCommentCheck=NameLine[0]
+               if LineCommentCheck != '#' and LineCommentCheck != '\012':
+                       NameParsedLine = string.splitfields(NameLine,None,1)
+                       TestNameList.append(NameParsedLine[0])
+
+               NameLine=NameList.readline()
+       NameList.close()
+
+     </script>
+     </block>
+
+   </sequence>
+
+  </function>
+
+
+
+
+
+  <!--
+
+  *************** Execute the LTP ***************
+
+  * Record test configuration in summary output logfile.
+  * Create client log directory.
+  * Create and Fill tmp directory for tests
+  * Determine if test duration is by loops or time.
+  * Call the "ParseAndExecute" function.
+  * Stop 'sar' on all client machines.
+  * Remove the temporary pan directory on all client machines.
+  * Stop the 24 hour results checking timer.
+ 
+
+  -->
+
+  <function name="RunTests">
+
+   <function-map-args>
+
+     <function-optional-arg name="machName" default="'local'"> 
+        List of machines where tests will run.
+     </function-optional-arg>
+
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+
+     <function-optional-arg name="RUNTEST" default="['syscalls','fs','dio','mm','commands','ipc','sched','pty','math']">
+        List of runtest scripts to execute.
+     </function-optional-arg>
+     
+     <function-optional-arg name="INSTANCES" default="1">
+        Number of concurrent instances to execute. 
+     </function-optional-arg>
+    
+     <function-optional-arg name="TIME" default="0">
+        Length of time to execute tests.
+     </function-optional-arg>
+   
+     <function-optional-arg name="LOOPS" default="1">
+        Number of loops to execute.
+     </function-optional-arg>
+
+     <function-optional-arg name="EXECTIME" default="0"> 
+        A time limit of how long to execute a single test, before killing. 
+     </function-optional-arg>
+
+   </function-map-args>
+
+    <sequence>
+
+        <if expr="machName!=RHOST">
+
+         <sequence>
+          
+           <script>
+
+             import string
+             TmpString=string.splitfields(machName,'.',1)
+             shortMachName=TmpString[0]
+	     RunBlock1 = shortMachName + ' RunBlock1'
+	     RunBlock2 = shortMachName + ' RunBlock2'
+             RunBlock3 = shortMachName + ' RunBlock3'
+
+           </script>
+           <block name="RunBlock1">
+           <process name="'Record Test Configs to Summary File'">
+
+            <location>'local'</location>
+            <command>'echo'</command>
+            <parms>'-e "**********************\n* TEST CONFIGS\n* Job Name: %s\n* Scenarios: %s\n* Instances: %s\n* Loops: %s\n* Time: %s\n* ExecTime: %s\n**********************"' % (STAXJobName,RUNTEST,INSTANCES,LOOPS,TIME,EXECTIME)</parms>
+            <stdout mode="'append'">
+               '%s/%s/%s-logfile-summary-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+            </stdout>
+
+           </process>
+	   </block>
+           <block name="RunBlock2">
+           <process name="'Create Temp Directory'">
+
+             <location>machName</location>
+             <command mode="'shell'">'mkdir'</command>
+             <parms>'-p /tmp/ltp-%s' % STAXJobID</parms>
+
+           </process>
+           </block>
+           <block name="RunBlock3">
+           <process name="'Fill Temp Directory'">
+
+             <location>machName</location>
+             <command mode="'shell'">'ln'</command>
+             <parms>'-s /usr/local/ltp/testcases/bin/* /tmp/ltp-%s' % STAXJobID</parms>
+
+           </process>
+           </block>
+           <message>'%s: Running the following scenarios:\n %s' % (machName,RUNTEST)</message>
+           <log>'%s: Following scenarios selected:\n %s' % (machName,RUNTEST)</log>
+
+             <sequence>
+
+               <script>loopCnt = int(LOOPS)</script>
+               <if expr="TIME != 0">       
+
+                 <sequence>
+
+                   <message>'%s: Test execution timer set to: %s' % (machName,TIME)</message>
+                   <log>'%s: Test timer set to: %s' % (machName,TIME)</log>
+                   <message>'%s: Individual test execution time limit set to: %s' % (machName,EXECTIME)</message>
+                   <log>'%s: Individual test time limit set to: %s' % (machName,EXECTIME)</log>
+                   <timer duration="TIME">
+
+                     <loop>
+
+                       <paralleliterate var="testInstance" in="InstanceList">
+
+                         <call function="'ParseAndExecute'">
+                          {
+                           'machName' : machName,
+                           'testInstance' : testInstance,
+			   'ClientLog' : ClientLog,
+                           'EXECTIME' : EXECTIME
+                          }
+                         </call>
+
+                       </paralleliterate>
+
+                     </loop>
+
+                   </timer>
+
+                 </sequence>
+                 <else>
+                 <sequence>
+
+                   <message>'%s: Test execution loops set to:  %s' % (machName,LOOPS)</message>
+                   <log>'%s: Loops set to: %s' % (machName,LOOPS)</log>
+                   <message>'%s: Individual test execution time limit set to: %s' % (machName,EXECTIME)</message>
+                   <log>'%s: Individual test time limit set to: %s' % (machName,EXECTIME)</log>
+                   <loop to="loopCnt">
+
+                     <paralleliterate var="testInstance" in="InstanceList">
+               
+                       <call function="'ParseAndExecute'">
+                        {
+                         'machName' : machName,
+                         'testInstance' : testInstance,
+       		         'ClientLog' : ClientLog,
+                         'EXECTIME' : EXECTIME
+                        }
+                       </call>
+
+                     </paralleliterate>
+
+                   </loop>
+
+                 </sequence>
+                 </else>
+
+               </if>
+
+             </sequence>
+
+           <message>'%s: Stopping sar' % machName</message>
+           <script>
+
+             import string
+             TmpString=string.splitfields(machName,'.',1)
+             shortMachName=TmpString[0]
+             SarBlock = 'main.' + shortMachName + '.' + shortMachName + '-SysStat Tool - sar'
+
+           </script>
+           <terminate block="SarBlock"/>
+
+         </sequence>
+
+        </if>
+
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+         ResultBlock = 'main.' + shortMachName + '.' + shortMachName + '-ResultsTimer'
+
+       </script>
+       <terminate block="ResultBlock"/>
+
+     </sequence>
+
+  </function>  
+
+
+
+
+
+  <!--
+
+  *************** Prepare Results ***************
+  * Create the temporary global logfile 
+
+
+  -->
+
+  <function name="PrepareResults">
+    
+    <function-map-args>
+
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+
+    </function-map-args>
+    <sequence>
+   
+     <script>
+
+       import socket
+       import string
+       HOSTNAME=socket.gethostname()
+       TmpString=string.splitfields(HOSTNAME,'.',1)
+       STAXServerName=TmpString[0]
+
+     </script>
+     <block name="'PrepareBlock'"> 
+     <process name="'Create Temporary Global Logfile'">
+          
+       <location>'local'</location>
+       <command mode="'shell'">'FmtLog'</command>
+       <parms>'format logfile /usr/local/staf/data/log/MACHINE/%s/GLOBAL/STAX_Job_%s_User.log newfile /tmp/%s-ltp-logfile >/dev/null' % (STAXServerName,STAXJobID,STAXJobID)</parms> 
+
+     </process>
+     </block>
+
+    </sequence>
+
+  </function>
+
+
+
+
+  <!--
+
+  *************** Gather Results ***************
+  * Create the ServerLog directory on STAX server if needed.
+  * Create LTP pass logfile for every client on STAX server.
+  * Create LTP fail logfile for every client on STAX server.
+  * Create LTP summary logfile, with success rate for each test, 
+    for every client on STAX server.
+  * Create 'sar' CPU datafile on all clients.  
+  * Create 'sar' memory datafile on all clients.
+  * Create 'sar' process datafile on all clients.
+  * Create directories for each client under ServerLog.
+  * Copy sar datafiles and test output files to STAX
+    server under respective client hostname directory.
+
+
+  -->
+
+  <function name="Results">
+    
+    <function-map-args>
+
+     <function-optional-arg name="machName" default="'local'"> 
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0"> 
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+
+
+    </function-map-args>
+
+    <sequence>
+
+     <if expr="machName!=RHOST">
+    
+      <sequence>
+ 
+        <script>
+
+          import socket
+          import string
+          HOSTNAME=socket.gethostname()
+          TmpString=string.splitfields(HOSTNAME,'.',1)
+          STAXServerName=TmpString[0]
+
+        </script>
+        <script>
+
+          import string
+          TmpString=string.splitfields(machName,'.',1)
+          shortMachName=TmpString[0]
+          ResultsBlock1 = shortMachName + ' ResultsBlock1'
+          ResultsBlock2 = shortMachName + ' ResultsBlock2'
+          ResultsBlock3 = shortMachName + ' ResultsBlock3'
+          ResultsBlock4 = shortMachName + ' ResultsBlock4'
+          ResultsBlock5 = shortMachName + ' ResultsBlock5'
+          ResultsBlock6 = shortMachName + ' ResultsBlock6'
+          ResultsBlock7 = shortMachName + ' ResultsBlock7'
+          ResultsBlock8 = shortMachName + ' ResultsBlock8'
+          ResultsBlock9 = shortMachName + ' ResultsBlock9'
+          ResultsBlock10a = shortMachName + ' ResultsBlock10a'
+          ResultsBlock10b = shortMachName + ' ResultsBlock10b'
+          ResultsBlock11 = shortMachName + ' ResultsBlock11'
+          ResultsBlock12 = shortMachName + ' ResultsBlock12'
+          ResultsBlock13 = shortMachName + ' ResultsBlock13'
+          ResultsBlock14 = shortMachName + ' ResultsBlock14'
+          ResultsBlock15 = shortMachName + ' ResultsBlock15'
+          ResultsBlock16 = shortMachName + ' ResultsBlock16'
+          ResultsBlock17 = shortMachName + ' ResultsBlock17'
+          ResultsBlock18 = shortMachName + ' ResultsBlock18'
+          ResultsBlock19 = shortMachName + ' ResultsBlock19'
+          ResultsBlock20 = shortMachName + ' ResultsBlock20'
+          ResultsBlock21 = shortMachName + ' ResultsBlock21'
+          ResultsBlock22 = shortMachName + ' ResultsBlock22'
+          ResultsBlock23 = shortMachName + ' ResultsBlock23'
+          ResultsBlock24 = shortMachName + ' ResultsBlock24'
+          ResultsBlock25 = shortMachName + ' ResultsBlock25'
+          ResultsBlock26 = shortMachName + ' ResultsBlock26'
+          ResultsBlock27 = shortMachName + ' ResultsBlock27'
+          ResultsBlock28 = shortMachName + ' ResultsBlock28'
+
+        </script>
+
+	<block name="ResultsBlock1">
+        <stafcmd name="'Make LTP Data Directory'">
+
+          <location>'local'</location>
+          <service>'fs'</service>
+          <request>'create directory %s/%s fullpath' % (ServerLog,machName)</request>
+
+        </stafcmd>
+        </block>
+        <block name="ResultsBlock2">
+        <process name="'Create Hardware Datafile'">
+       
+          <location>machName</location>
+          <command mode="'shell'">'cat'</command>
+          <parms>'/proc/cpuinfo /proc/meminfo; mount; df -h'</parms> 
+          <stdout mode="'append'">
+             '%s/%s-hardware_data-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+          </stdout>
+
+        </process>
+        </block>
+        <block name="ResultsBlock3">
+        <process name="'Create sar CPU Datafile - Part 1'">
+       
+          <location>machName</location>
+          <command mode="'shell'">'export'</command>
+          <parms>'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin;sar -f %s/%s-sarfile-%s.%s -U ALL' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms> 
+          <stdout mode="'append'">
+             '%s/%s-sar-cpudata-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+          </stdout>
+
+        </process>
+        </block>
+        <block name="ResultsBlock4">
+        <process name="'Create sar CPU Datafile - Part 2'">
+       
+          <location>machName</location>
+          <command mode="'shell'">'export'</command>
+          <parms>'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin;sar -f %s/%s-sarfile-%s.%s -u' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms> 
+          <stdout mode="'append'">
+             '%s/%s-sar-cpudata-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+          </stdout>
+
+        </process>
+        </block>
+        <block name="ResultsBlock5">
+        <process name="'Create sar Memory Datafile'">
+       
+          <location>machName</location>
+          <command mode="'shell'">'export'</command>
+          <parms>'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin;sar -f %s/%s-sarfile-%s.%s -r' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms> 
+          <stdout mode="'append'">
+             '%s/%s-sar-memdata-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+          </stdout>
+        </process>
+        </block>
+        <block name="ResultsBlock6">
+        <process name="'Create sar Processes Datafile'">
+       
+          <location>machName</location>
+          <command mode="'shell'">'export'</command>
+          <parms>'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin;sar -f %s/%s-sarfile-%s.%s -q' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms> 
+          <stdout mode="'append'">
+             '%s/%s-sar-procdata-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+          </stdout>
+        </process>
+        </block>
+        <block name="ResultsBlock7">
+        <process name="'Get Passes for Machine Logfile'">
+
+          <location>'local'</location>
+          <command mode="'shell'">'cat'</command>
+          <parms>'/tmp/%s-ltp-logfile | grep "\|%s\|" | grep Pass ' % (STAXJobID,machName)</parms>
+          <stdout mode="'append'">
+             '%s/%s/%s-logfile-pass-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+
+          </stdout>
+
+        </process>
+        </block>
+        <block name="ResultsBlock8">
+        <process name="'Get Failures for Machine Logfile'">
+
+          <location>'local'</location>
+          <command mode="'shell'">'cat'</command>
+          <parms>'/tmp/%s-ltp-logfile | grep "\|%s\|" | grep Fail ' % (STAXJobID,machName)</parms>
+          <stdout mode="'append'">
+             '%s/%s/%s-logfile-fail-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+
+          </stdout>
+
+        </process>
+        </block>
+        <block name="ResultsBlock9">
+        <iterate var="TestNames" in="TestNameList">
+
+          <sequence>
+
+            <process name="'Record Test Name in Machine Logfile'">
+
+              <location>'local'</location>
+              <command mode="'shell'">'echo'</command>
+              <parms>'Test: %s' % TestNames</parms>
+              <stdout mode="'append'">
+                 '%s/%s/%s-logfile-summary-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+              </stdout>
+
+            </process>
+            <process name="'Compute and Record Passes in Machine Logfile'">
+
+              <location>'local'</location>
+              <command mode="'shell'">'echo'</command>
+              <parms>'Passes:`grep " %s " %s/%s/%s-logfile-pass-%s.%s | wc -l`' % (TestNames,ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+              <stdout mode="'append'">
+                 '%s/%s/%s-logfile-summary-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+              </stdout>
+              <returnstdout/>
+
+            </process>
+            <process name="'Compute and Record Failures in Machine Logfile'">
+
+              <location>'local'</location>
+              <command mode="'shell'">'echo'</command>
+              <parms>'Failures:`grep " %s " %s/%s/%s-logfile-fail-%s.%s | wc -l` \n' % (TestNames,ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+              <stdout mode="'append'">
+                 '%s/%s/%s-logfile-summary-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+              </stdout>
+              <returnstdout/>
+
+            </process>
+            <script>
+
+              import string
+
+              SuccessRate = 0
+              PassNum = 0
+              FailNum = 0
+
+              SummaryFile= ServerLog +'/'+ machName +'/'+ str(STAXJobID) + '-logfile-summary-'+ STAXJobStartDate + '.' + STAXJobStartTime
+              SummaryList=open(SummaryFile,"r")
+              SummaryLine=SummaryList.readline()
+              while SummaryLine != '':
+                      if SummaryLine[0] != '*':
+                              ParsedSmryLn = string.splitfields(SummaryLine,None,1)
+                              if ParsedSmryLn[1] == TestNames + '\012':
+                                      PassLine = SummaryList.readline()
+                                      PassStr = string.splitfields(PassLine,None,1)
+                                      PassNum = float(PassStr[1])
+                                      FailLine = SummaryList.readline()
+                                      FailStr = string.splitfields(FailLine,None,1)
+                                      FailNum = float(FailStr[1])
+                                      if PassNum == 0:
+                                              SuccessRate = 0
+                                              break
+                                      SuccessRate = PassNum / ( PassNum + FailNum ) * 100
+                                      break
+                      SummaryLine=SummaryList.readline()
+              SummaryList.close()
+
+            </script>
+            <process name="'Record Success Rate in Machine Logfile'">
+
+              <location>'local'</location>
+              <command mode="'shell'">'echo'</command>
+              <parms>'Success Rate: %s percent; echo "-------------------------"' % SuccessRate</parms>
+              <stdout mode="'append'">
+                 '%s/%s/%s-logfile-summary-%s.%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+              </stdout>           
+
+            </process>
+
+          </sequence>
+
+        </iterate>
+        </block>
+        <block name="ResultsBlock10a">
+        <process name="'Create Temporary Date File'">
+
+         <location>'local'</location>
+         <command>'date'</command>
+         <parms>'+%Y%m%d.%H:%M:%S'</parms>
+         <stdout mode="'replace'">
+           '/tmp/ltp-%s-datefile'%STAXJobID
+         </stdout>
+
+        </process>
+	</block>
+        <block name="ResultsBlock10b">
+        <script>
+
+          import string
+          DateFileName='/tmp/ltp-' + str(STAXJobID) +'-datefile'
+          DateFile=open(DateFileName,"r")
+          DateString=string.rstrip(DateFile.readline())
+
+        </script>
+        </block>
+        <block name="ResultsBlock11">
+        <process name="'Create Copy of LTP Output File'">
+
+          <location>machName</location>
+          <command>'cp'</command>
+          <parms>'%s/%s-output-%s.%s /tmp/ltp-%s/ltp-output' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime,STAXJobID)</parms>        
+
+        </process>
+        </block>
+        <block name="ResultsBlock12">
+        <stafcmd name="'Retrieve LTP Output File'">
+
+          <location>machName</location>
+          <service>'fs'</service>
+          <request>'copy file /tmp/ltp-%s/ltp-output tofile /tmp/%s-output tomachine %s' % (STAXJobID,STAXJobID,STAXServerName) </request>
+
+        </stafcmd>
+        </block>
+        <if expr="RC == 0">
+
+          <sequence>
+
+            <message>'LTP Output File Retrieved from %s.' % (machName)</message>
+            <log>'Retrieved LTP Output File from %s.' % machName</log>
+            <if expr="CLEAN == 1">
+              <process name="'Clear LTP Output File'">
+
+	        <location>machName</location>
+	        <command mode="'shell'">'>'</command>
+	        <parms>'%s/%s-output-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+
+	      </process>
+
+	    </if>
+
+          </sequence>
+
+          <else>
+
+            <sequence>
+
+              <message>'Could Not Retrieve LTP Output File from %s\nRC=%s\nSTAFResult=%s' % (machName,RC,STAFResult)</message>
+              <log>'Could Not Retrieve LTP Output File from %s' % machName</log>
+
+            </sequence>
+
+          </else>
+
+        </if>
+        <block name="ResultsBlock13">
+        <process name="'Rename LTP Output File'">
+
+          <location>'local'</location>
+          <command>'mv'</command>
+          <parms>'/tmp/%s-output %s/%s/%s-output-%s' % (STAXJobID,ServerLog,machName,STAXJobID,DateString)</parms>
+
+        </process>
+        </block>
+        <block name="ResultsBlock14">
+        <process name="'Create Copy of Hardware Datafile'">
+
+          <location>machName</location>
+          <command>'cp'</command>
+          <parms>'%s/%s-hardware_data-%s.%s /tmp/ltp-%s/ltp-hardware_data' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime,STAXJobID)</parms>        
+
+        </process>
+        </block>
+        <block name="ResultsBlock15">
+        <stafcmd name="'Retrieve Hardware Datafile'">
+
+          <location>machName</location>
+          <service>'fs'</service>
+          <request>'copy file /tmp/ltp-%s/ltp-hardware_data tofile /tmp/%s-hardware_data tomachine %s' % (STAXJobID,STAXJobID,STAXServerName) </request>
+
+        </stafcmd>
+        </block>
+        <if expr="RC == 0">
+
+          <sequence>
+
+            <message>'Hardware Datafile Retrieved from %s.' % (machName)</message>
+            <log>'Retrieved Hardware Datafile File from %s.' % machName</log>
+
+          </sequence>
+
+          <else>
+
+            <sequence>
+
+              <message>'Could Not Retrieve Hardware Datafile from %s\nRC=%s\nSTAFResult=%s' % (machName,RC,STAFResult)</message>
+              <log>'Could Not Retrieve HardwareCPU Datafile from %s' % machName</log>
+
+            </sequence>
+
+          </else>
+
+        </if>
+        <block name="ResultsBlock16">
+        <process name="'Rename Hardware Datafile'">
+
+          <location>'local'</location>
+          <command>'mv'</command>
+          <parms>'/tmp/%s-hardware_data %s/%s/%s-hardware_data-%s' % (STAXJobID,ServerLog,machName,STAXJobID,DateString)</parms>
+
+        </process>
+	</block>
+        <block name="ResultsBlock17">
+        <process name="'Create Copy of sar CPU Datafile'">
+
+          <location>machName</location>
+          <command>'cp'</command>
+          <parms>'%s/%s-sar-cpudata-%s.%s /tmp/ltp-%s/ltp-sar-cpudata' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime,STAXJobID)</parms>        
+
+        </process>
+	</block>
+        <block name="ResultsBlock18">
+        <stafcmd name="'Retrieve sar CPU Datafile'">
+
+          <location>machName</location>
+          <service>'fs'</service>
+          <request>'copy file /tmp/ltp-%s/ltp-sar-cpudata tofile /tmp/%s-sar-cpudata tomachine %s' % (STAXJobID,STAXJobID,STAXServerName) </request>
+
+        </stafcmd>
+	</block>
+        <if expr="RC == 0">
+
+          <sequence>
+
+            <message>'sar CPU Datafile Retrieved from %s.' % (machName)</message>
+            <log>'Retrieved CPU Datafile File from %s.' % machName</log>
+
+          </sequence>
+
+          <else>
+
+            <sequence>
+
+              <message>'Could Not Retrieve CPU Datafile from %s\nRC=%s\nSTAFResult=%s' % (machName,RC,STAFResult)</message>
+              <log>'Could Not Retrieve CPU Datafile from %s' % machName</log>
+
+            </sequence>
+
+          </else>
+
+        </if>
+        <block name="ResultsBlock19">
+        <process name="'Rename sar CPU Datafile'">
+
+          <location>'local'</location>
+          <command>'mv'</command>
+          <parms>'/tmp/%s-sar-cpudata %s/%s/%s-sar-cpudata-%s' % (STAXJobID,ServerLog,machName,STAXJobID,DateString)</parms>
+
+        </process>
+	</block>
+        <block name="ResultsBlock20">
+        <process name="'Create Copy of sar Memory Datafile'">
+
+          <location>machName</location>
+          <command>'cp'</command>
+          <parms>'%s/%s-sar-memdata-%s.%s /tmp/ltp-%s/ltp-sar-memdata' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime,STAXJobID)</parms>        
+
+        </process>
+	</block>
+        <block name="ResultsBlock21">
+        <stafcmd name="'Retrieve sar Memory Datafile'">
+
+          <location>machName</location>
+          <service>'fs'</service>
+          <request>'copy file /tmp/ltp-%s/ltp-sar-memdata tofile /tmp/%s-sar-memdata tomachine %s' % (STAXJobID,STAXJobID,STAXServerName) </request>
+
+        </stafcmd>
+	</block>
+        <if expr="RC == 0">
+
+          <sequence>
+
+            <message>'sar Memory Datafile Retrieved from %s.' % (machName)</message>
+            <log>'Retrieved Memory Datafile from %s.' % machName</log>
+
+          </sequence>
+
+          <else>
+
+            <sequence>
+
+              <message>'Could Not Retrieve Memory Datafile from %s\nRC=%s\nSTAFResult=%s' % (machName,RC,STAFResult)</message>
+              <log>'Could Not Retrieve Memory Datafile from %s' % machName</log>
+
+            </sequence>
+
+          </else>
+
+        </if>
+        <block name="ResultsBlock22">
+        <process name="'Rename sar Memory Datafile'">
+
+          <location>'local'</location>
+          <command>'mv'</command>
+          <parms>'/tmp/%s-sar-memdata %s/%s/%s-sar-memdata-%s' % (STAXJobID,ServerLog,machName,STAXJobID,DateString)</parms>
+
+        </process>
+	</block>
+        <block name="ResultsBlock23">
+        <process name="'Create Copy of sar Process Datafile'">
+
+          <location>machName</location>
+          <command>'cp'</command>
+          <parms>'%s/%s-sar-procdata-%s.%s /tmp/ltp-%s/ltp-sar-procdata' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime,STAXJobID)</parms>        
+
+        </process>
+	</block>
+        <block name="ResultsBlock24">
+        <stafcmd name="'Retrieve sar Processes Datafile'">
+
+          <location>machName</location>
+          <service>'fs'</service>
+          <request>'copy file /tmp/ltp-%s/ltp-sar-procdata tofile /tmp/%s-sar-procdata tomachine %s' % (STAXJobID,STAXJobID,STAXServerName) </request>
+
+        </stafcmd>
+	</block>
+        <if expr="RC == 0">
+
+          <sequence>
+
+            <message>'sar Processes Datafile Retrieved from %s.' % (machName)</message>
+            <log>'Retrieved Processes Datafile File from %s.' % machName</log>
+
+          </sequence>
+
+          <else>
+
+            <sequence>
+
+              <message>'Could Not Retrieve Processes Datafile from %s\nRC=%s\nSTAFResult=%s' % (machName,RC,STAFResult)</message>
+              <log>'Could Not Retrieve Processes Datafile from %s' % machName</log>
+
+            </sequence>
+
+          </else>
+
+        </if>
+        <block name="ResultsBlock25">
+        <process name="'Rename sar Process Datafile'">
+
+          <location>'local'</location>
+          <command>'mv'</command>
+          <parms>'/tmp/%s-sar-procdata %s/%s/%s-sar-procdata-%s' % (STAXJobID,ServerLog,machName,STAXJobID,DateString)</parms>
+
+        </process>
+	</block>
+        <block name="ResultsBlock26">
+        <process name="'Rename fail logfile'">
+
+	  <location>'local'</location>
+	  <command>'mv'</command>
+	  <parms>'%s/%s/%s-logfile-fail-%s.%s %s/%s/%s-logfile-fail-%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime,ServerLog,machName,STAXJobID,DateString)</parms>
+
+	</process>
+	</block>
+        <block name="ResultsBlock27">
+        <process name="'Rename pass logfile'">
+
+	  <location>'local'</location>
+	  <command>'mv'</command>
+	  <parms>'%s/%s/%s-logfile-pass-%s.%s %s/%s/%s-logfile-pass-%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime,ServerLog,machName,STAXJobID,DateString)</parms>
+
+	</process>
+	</block>
+        <block name="ResultsBlock28">
+        <process name="'Rename summary logfile'">
+
+	  <location>'local'</location>
+	  <command>'mv'</command>
+	  <parms>'%s/%s/%s-logfile-summary-%s.%s %s/%s/%s-logfile-summary-%s' % (ServerLog,machName,STAXJobID,STAXJobStartDate,STAXJobStartTime,ServerLog,machName,STAXJobID,DateString)</parms>
+
+	</process>
+	</block>
+      </sequence>
+
+    </if>
+
+   </sequence>
+
+  </function>      
+
+
+
+
+
+  <!--
+
+  *************** 24 hour Results Checker ***************
+  * Call the Results function every 24 hours
+  
+
+  -->  
+
+  <function name="TimedResultsCheck">
+
+    <function-map-args>
+
+     <function-optional-arg name="machName" default="'local'"> 
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="ServerLog" default="'/var/log/staf'">
+        Path for server-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0">
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="TestNameList" default="[]">
+        List of tests used in results gathering.
+     </function-optional-arg>
+
+    </function-map-args>
+    <sequence>
+
+     <script>
+
+      import string
+      TmpString=string.splitfields(machName,'.',1)
+      shortMachName=TmpString[0]
+      ResultBlock= shortMachName + '-ResultsTimer'
+
+     </script>
+     <block name="ResultBlock">
+
+      <loop>
+
+       <sequence>
+
+        <timer duration="'24h'">
+
+          <loop><nop/></loop>  
+
+        </timer>
+        <call function="'PrepareResults'">{'TestNameList' : TestNameList}</call>
+        <call function="'Results'">{'machName' : machName,'ClientLog' : ClientLog,'ServerLog' : ServerLog,'RHOST' : RHOST,'TestNameList' : TestNameList}</call>
+        <message>"24 hour results check performed"</message>
+
+       </sequence>
+
+      </loop>
+
+     </block>
+
+    </sequence>
+
+  </function>
+
+
+
+
+
+  <!--
+
+  *************** Parse scenario file and Execute tests ***************
+  * Create list of tests for each instance.
+  * Execute tests on each client machine using pan.
+  * Log test output.
+  * Log test pass/fail results to STAX log service.
+  * Report test pass/fail results.
+
+  -->  
+
+  <function name="ParseAndExecute">
+
+    <function-map-args>
+
+      <function-optional-arg name="machName" default="'local'">
+        Machine where tests will run.
+      </function-optional-arg>
+      <function-optional-arg name="testInstance" default="0">
+        Instance label for tests.
+      </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="EXECTIME" default="0"> 
+        A time limit of how long to execute a single test, before killing. 
+     </function-optional-arg>
+
+    </function-map-args>
+    <sequence>
+
+      <script>
+
+        import string
+        TmpString=string.splitfields(machName,'.',1)
+        shortMachName=TmpString[0]
+        FileName='/tmp/ltp-' + str(STAXJobID) + '-alltests.' + str(testInstance)
+        TestList=open(FileName,"r")
+        LabelList = []
+        CommandList = []
+       	Line=TestList.readline()
+        while Line != '':
+        	CommentCheck=Line[0]
+        	if CommentCheck != '#' and CommentCheck != '\012':
+        		ParsedLine = string.splitfields(Line,None,1)
+        		LabelList.append(ParsedLine[0] + ' (' + str(testInstance) + ')' + '-' + shortMachName) 
+        		CommandList.append(string.rstrip(ParsedLine[1]))
+			
+        	Line=TestList.readline()
+
+      </script>
+      <iterate var="Label" in="LabelList">
+        
+        <sequence>
+
+          <script>CommandLine=CommandList.pop(0)</script>
+          <testcase name="Label">
+
+            <block name="Label">  
+
+              <sequence>
+
+                <if expr="EXECTIME != 0">
+
+                  <sequence>
+                  
+                    <timer duration="EXECTIME">             
+                    <sequence>
+  
+                      <process name="'Test'">
+
+                         <location>machName</location>
+                         <command mode="'shell'">
+                           'export RHOST=%s;export PASSWD=%s;export LTPROOT=/usr/local/ltp;export TMP=/tmp/ltp-%s;export PATH=/bin:/usr/bin:/sbin/:/usr/sbin:$TMP;$LTPROOT/pan/pan -e -S -n %s -a %s "%s"' % (RHOST,PASSWD,STAXJobID,STAXJobID,STAXJobID,CommandLine)
+                         </command>
+  		         <workdir>'/tmp/ltp-%s' % STAXJobID</workdir>
+	                 <stdout mode="'append'">
+                          '%s/%s-output-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+                         </stdout>
+
+                      </process>
+                      <if expr="RC == 0">
+
+                        <sequence>
+
+      		          <tcstatus result="'pass'"/>
+                          <log level = "'pass'">'%s: %s ' % (machName,Label)</log>
+  
+                        </sequence>
+                       <else>
+                        <sequence>
+
+                          <tcstatus result="'fail'">'%s FAILED\nReturn Code=%s' % (Label,RC)</tcstatus>
+                          <log level = "'fail'">'%s: %s , RC: %s' % (machName,Label,RC)</log>
+
+                        </sequence>
+                       </else>
+
+                      </if>
+
+                    </sequence>
+                    </timer>
+                    <if expr="RC != 0">
+
+                      <sequence>
+
+                         <tcstatus result="'fail'">'%s FAILED\nTest exceeded EXECTIME: %s' % (Label,EXECTIME)</tcstatus>
+                         <log level = "'fail'">'%s: %s , Exceeded EXECTIME: %s' % (machName,Label,EXECTIME)</log>
+
+                      </sequence>
+                
+                    </if>
+
+                  </sequence>
+                 <else>
+                  <sequence>
+  
+                    <process name="'Test'">
+
+                       <location>machName</location>
+                       <command mode="'shell'">
+                         'export RHOST=%s;export PASSWD=%s;export LTPROOT=/usr/local/ltp;export TMP=/tmp/ltp-%s;export PATH=/bin:/usr/bin:/sbin/:/usr/sbin:$TMP;$LTPROOT/pan/pan -e -S -n %s -a %s "%s"' % (RHOST,PASSWD,STAXJobID,STAXJobID,STAXJobID,CommandLine)
+                       </command>
+  		       <workdir>'/tmp/ltp-%s' % STAXJobID</workdir>
+	               <stdout mode="'append'">
+                        '%s/%s-output-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)
+                       </stdout>
+
+                    </process>
+                    <if expr="RC == 0">
+
+                      <sequence>
+
+      		        <tcstatus result="'pass'"/>
+                        <log level = "'pass'">'%s: %s ' % (machName,Label)</log>
+  
+                      </sequence>
+                     <else>
+                      <sequence>
+
+                        <tcstatus result="'fail'">'%s FAILED\nReturn Code=%s' % (Label,RC)</tcstatus>
+                        <log level = "'fail'">'%s: %s , RC: %s' % (machName,Label,RC)</log>
+
+                      </sequence>
+                     </else>
+
+                    </if>
+
+                  </sequence>
+                 </else>
+
+                </if>
+
+              </sequence>
+
+            </block> 
+
+          </testcase>
+
+        </sequence>
+
+      </iterate>
+      <script>TestList.close</script>
+
+    </sequence>
+   
+  </function>
+
+
+
+
+
+  <!--
+
+  *************** Cleanup clients and server ***************
+  * Remove temporary directory from all clients.
+  * Remove test output and sar data files from all clients.
+  * Restore original .rhosts on all clients.
+  * Restore /etc/securetty on all clients.
+ 
+  
+
+  -->  
+
+  <function name="CleanUp">
+
+    <function-map-args>
+
+     <function-optional-arg name="machName" default="'local'"> 
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="CLEAN" default="1"> 
+        Acts as a switch to turn cleanup on(1) and off(0).
+     </function-optional-arg>
+
+    </function-map-args>
+     
+    <if expr="CLEAN == 1">
+
+       <sequence>
+	 
+         <script>
+
+           import string
+           TmpString=string.splitfields(machName,'.',1)
+           shortMachName=TmpString[0]
+           ClientCleanBlock1 = shortMachName + ' ClientCleanBlock1'
+           ClientCleanBlock2 = shortMachName + ' ClientCleanBlock2'
+           ClientCleanBlock3 = shortMachName + ' ClientCleanBlock3'
+           ClientCleanBlock4 = shortMachName + ' ClientCleanBlock4'
+           ClientCleanBlock5 = shortMachName + ' ClientCleanBlock5'
+           ClientCleanBlock6 = shortMachName + ' ClientCleanBlock6'
+           ClientCleanBlock7 = shortMachName + ' ClientCleanBlock7'
+
+         </script>
+         <block name="ClientCleanBlock1">
+         <process name="'Remove Temp Directory'">
+
+           <location>machName</location>
+           <command mode="'shell'">'rm'</command>
+           <parms>'-rf /tmp/ltp-%s' % STAXJobID</parms>
+
+         </process>
+         </block>
+         <block name="ClientCleanBlock2">
+         <process name="'Remove sar Output Files'">
+
+           <location>machName</location>
+           <command mode="'shell'">'rm'</command>
+           <parms>'-rf %s/%s-sar-*-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+
+         </process>
+         </block>
+	 <block name="ClientCleanBlock3">
+         <process name="'Remove sar Datafile'">
+       
+           <location>machName</location>
+           <command mode="'shell'">'rm'</command>
+           <parms>'-f %s/%s-sarfile-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms> 
+           
+         </process>
+         </block>
+	 <block name="ClientCleanBlock4">
+         <process name="'Remove LTP Output File'">
+       
+           <location>machName</location>
+           <command mode="'shell'">'rm'</command>
+           <parms>'-f %s/%s-output-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+           
+         </process>
+         </block>
+	 <block name="ClientCleanBlock5">
+         <process name="'Remove Hardware File'">
+       
+           <location>machName</location>
+           <command mode="'shell'">'rm'</command>
+           <parms>'-f %s/%s-hardware_data-%s.%s' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+           
+         </process>
+         </block>
+	 <block name="ClientCleanBlock6">
+         <process name="'Restore .rhosts File'">
+       
+           <location>machName</location>
+           <command mode="'shell'">'mv'</command>
+           <parms>'-f /root/.rhosts.BAK /root/.rhosts 2>/dev/null'</parms>
+           
+         </process>
+         </block>
+	 <block name="ClientCleanBlock7">
+         <process name="'Restore /etc/securetty File'">
+       
+           <location>machName</location>
+           <command mode="'shell'">'mv'</command>
+           <parms>'-f /etc/securetty.BAK /etc/securetty 2>/dev/null'</parms>
+           
+         </process> 
+	 </block>   
+
+      </sequence>
+
+    </if>
+
+  </function>
+
+
+
+
+
+
+  <!--
+
+  *************** Local Cleanup ***************
+  * Remove scenario list from server.
+  * Remove global logfile from server.
+  
+
+  -->  
+
+  <function name="LocalCleanUp">
+
+    <function-map-args>
+
+     <function-optional-arg name="CLEAN" default="1"> 
+        Acts as a switch to turn cleanup on(1) and off(0).
+     </function-optional-arg>
+
+    </function-map-args>
+    <if expr="CLEAN == 1">
+
+      <sequence>
+
+	<block name="'ServerCleanBlock1'">
+        <process name="'Remove List of Tests to Execute'">
+
+          <location>'local'</location>
+          <command mode="'shell'">'rm'</command>
+          <parms>'-f /tmp/ltp-%s-alltests.*' % STAXJobID</parms>
+
+        </process>
+	</block>
+	<block name="'ServerCleanBlock2'">
+        <process name="'Remove Global Logfile'">
+
+          <location>'local'</location>
+          <command mode="'shell'">'rm'</command>
+          <parms>'-f /tmp/%s-ltp-logfile' % STAXJobID</parms>
+
+        </process>
+	</block>
+	<block name="'ServerCleanBlock3'">
+        <process name="'Remove Temporary Datefile'">
+
+          <location>'local'</location>
+          <command mode="'shell'">'rm'</command>
+          <parms>'-f /tmp/ltp-%s-datefile' % STAXJobID</parms>
+
+        </process>
+	</block>
+
+      </sequence>
+
+    </if>
+
+  </function>
+
+
+
+
+
+  <!--
+
+  *************** sar function ***************
+  * Start 'sar' on all machines
+  
+
+  -->  
+
+  <function name="StartSar">
+
+    <function-map-args>
+
+     <function-optional-arg name="machName" default="'local'"> 
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="ClientLog" default="'/var/log/staf'">
+        Path for client-side logging.
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0">
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+
+    </function-map-args>
+    <sequence>
+
+     <script>
+
+       import string
+       TmpString=string.splitfields(machName,'.',1)
+       shortMachName=TmpString[0]
+       SarBlock = shortMachName + '-SysStat Tool - sar'
+
+     </script>
+
+     <block name="SarBlock">
+
+        <if expr="machName!=RHOST">
+
+         <sequence>
+
+           <message>'%s: Starting sar.' % machName </message>
+           <process name="'sar'">
+ 
+             <location>machName</location>
+             <command mode="'shell'">'export'</command>
+             <parms>'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin; sar -o %s/%s-sarfile-%s.%s 60 0' % (ClientLog,STAXJobID,STAXJobStartDate,STAXJobStartTime)</parms>
+
+           </process>
+
+         </sequence>
+
+        </if>
+
+     </block>
+  
+    </sequence>
+
+   </function>
+
+
+
+
+  <!--
+
+  *************** Configure the RHOST for network testing ***************
+
+  * Rename /etc/securetty
+  * Create .rhosts file for root on all machines
+ 
+  -->
+
+  <function name="NetworkConfigure">
+
+    <function-map-args>
+
+     <function-optional-arg name="RHOST" default="0">
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="machName" default="'local'">
+        Name of machine where tests will run.
+     </function-optional-arg>
+
+    </function-map-args>
+
+    <sequence>
+       <script>
+
+         import string
+         TmpString=string.splitfields(machName,'.',1)
+         shortMachName=TmpString[0]
+         NetworkConfigBlock1 = shortMachName + ' NetworkConfigBlock1'
+         NetworkConfigBlock2 = shortMachName + ' NetworkConfigBlock2'
+         NetworkConfigBlock3 = shortMachName + ' NetworkConfigBlock3'
+         NetworkConfigBlock4 = shortMachName + ' NetworkConfigBlock4'
+
+       </script>
+       <block name="NetworkConfigBlock1">
+       <process name="'Rename original .rhosts if exists'">
+
+         <location>machName</location>
+         <command mode="'shell'">'mv'</command>
+         <parms>'-f /root/.rhosts /root/.rhosts.BAK 2>/dev/null'</parms>
+
+       </process>
+       </block>
+       <block name="NetworkConfigBlock2">
+       <process name="'Rename /etc/securetty if exists'">
+
+         <location>machName</location>
+         <command mode="'shell'">'mv'</command>
+         <parms>'-f /etc/securetty /etc/securetty.BAK 2>/dev/null'</parms>
+
+       </process>
+       </block>
+       <block name="NetworkConfigBlock3">
+       <iterate var="clientName" in="MachList">
+
+         <process name="'Adding clients to server .rhosts file'">
+
+           <location>machName</location>
+           <command>'echo'</command>
+           <parms>'%s' % clientName</parms>
+           <stdout mode="'append'">'/root/.rhosts'</stdout>
+
+         </process>
+       
+       </iterate>
+       </block>
+       <block name="NetworkConfigBlock4">
+       <process name="'Set correct permissions on .rhosts file'">
+
+         <location>machName</location>
+         <command>'chmod'</command>
+         <parms>'644 /root/.rhosts'</parms>
+
+       </process>
+       </block>
+
+    </sequence>
+
+  </function>
+
+
+
+
+  <!--
+
+  *************** Check for resource pool usage ***************
+
+  * Check if MachList is a number 
+  * If MachList is a number, pull the specified number of clients
+    from the resource pool 
+
+  -->
+
+  <function name="ResPoolCheck">
+
+   <function-map-args>
+
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="resPoolServer">
+        Name of resource pool server. 
+     </function-optional-arg>
+     <function-optional-arg name="clientPool">
+        Name of machine client pool on resource pool server. 
+     </function-optional-arg>
+
+   </function-map-args>
+
+    <sequence>
+    
+      <script>
+ 
+        import string
+        ResP = int(0)
+        if MachList[0].isdigit():
+                ResP = int(1) 
+                MachCount = int(MachList[0]) - 1
+                MachList=[]
+
+      </script>
+      <if expr="ResP == 1">
+
+        <loop from="0" to="MachCount">
+
+          <sequence>
+
+            <stafcmd>
+
+              <location>resPoolServer</location>
+              <service>'respool'</service>
+              <request>'request pool %s' % clientPool</request>
+
+            </stafcmd>
+            <if expr="RC==0">
+
+              <script>
+
+                MachList.append(STAFResult)
+
+              </script>
+              <else>
+               
+                <sequence>
+
+                  <message>'Not Enough Clients Available - TEST TERMINATED'</message>
+                  <log>'TESTING TERMINATED: Not Enough Clients Available'</log>
+                  <terminate block="'main'"/>
+
+                </sequence>
+
+              </else>
+
+            </if>
+
+          </sequence>
+
+        </loop>
+
+      </if>
+
+    </sequence>
+
+  </function>
+
+
+
+
+  <!--
+
+  *************** Release clients if resource pool was used ***************
+
+  * Check if resource pool was used
+  * If resource pool used, release clients and return them back to 
+    the resource pool
+
+  -->
+
+  <function name="ReleaseClients">
+
+   <function-map-args>
+
+     <function-optional-arg name="MachList" default="['local']">
+        List of machines where tests will run.
+     </function-optional-arg>
+     <function-optional-arg name="RHOST" default="0">
+        Machine that will act as the server for the network tests.
+     </function-optional-arg>
+     <function-optional-arg name="resPoolServer">
+        Name of resource pool server.
+     </function-optional-arg>
+     <function-optional-arg name="clientPool">
+        Name of machine client pool on resource pool server.
+     </function-optional-arg>
+
+   </function-map-args>
+
+    <if expr="resPoolServer!=None">
+
+      <iterate var="machName" in="MachList">
+
+        <if expr="machName!=RHOST">
+
+          <stafcmd>
+
+            <location>resPoolServer</location>
+            <service>'respool'</service>
+            <request>'release pool %s entry %s' % (clientPool,machName)</request>
+
+          </stafcmd> 
+
+        </if>
+
+      </iterate>
+
+    </if>
+
+  </function>
+
+</stax>
+
