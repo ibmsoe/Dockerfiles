@@ -2,7 +2,7 @@
     "name": "PowerAI-Example-Notebooks",
     "description": "PowerAI-examples (caffe, torch, tensorflow), access Jupyter Notebooks from ports 8888,8889,8890, TensorBoard from port 6006 and DIGITS from port 5000. SSH into instance with user id: nimbix@<fqdn> and password from the Dashboard. Run “sudo su” followed by “jupyter notebook list” to find the tokens to login to the Jupyter notebook servers. The container runs for a max of 2 hours",
     "author": "ipoddar@us.ibm.com",
-    "licensed": false,
+    "licensed": true,
     "classifications": [
         "Machine Learning/Deep Learning",
         "IBM POWER/Deep Learning"
@@ -22,6 +22,7 @@
             "interactive": true,
             "name": "Server",
             "description": "Launch a session with all boot services, including SSH.  Connection address and credentials will appear in your web browser once available.",
+            "scale_max": 1,
             "walltime": "02:00:00",
             "parameters": {}
         }
