@@ -22,4 +22,7 @@ RUN /bin/bash -c "source /opt/DL/torch/bin/torch-activate && luarocks make"
 WORKDIR /opt/DL/tensorflow
 RUN git clone https://github.com/aymericdamien/TensorFlow-Examples.git
 
+#add NIMBIX application
+COPY AppDef.json /etc/NAE/AppDef.json
+RUN curl --fail -X POST -d @/etc/NAE/AppDef.json https://api.jarvice.com/jarvice/validate
 
